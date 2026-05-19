@@ -2,35 +2,31 @@ import json
 import requests
 import streamlit as st
 
-# 1. Page Configuration
+# Page Configuration
 st.set_page_config(page_title="AI Flashcard Generator", page_icon="🎴", layout="centered")
 
-# 2. Configuration Settings
-# Replace this string with your real public App Key (starts with pk_)
-POLLINATIONS_APP_KEY = "pk_AthVUCdXSHpixSqN"
+# Configuration Settings
+POLLINATIONS_APP_KEY = "pk_athvucdxshpixsqn"  # Your active App Key
 
-TEXT_API_URL = "https://pollinations.ai"
-IMAGE_API_URL = "https://pollinations.ai"
+# Modern Unified Pollinations Endpoints
+TEXT_API_URL = "https://gen.pollinations.ai/text"
+IMAGE_API_URL = "https://gen.pollinations.ai/image/"
 
-# 3. Check for User Authentication Token
-# Pollinations redirects back to your site with '?token=sk_...' in the URL
+# Check for User Authentication Token sent back via redirect parameters
 query_params = st.query_params
 user_token = query_params.get("token", None)
 
-# 4. App Headers
 st.title("🎴 AI Flashcard Deck Generator")
 st.caption("Flower Tier BYOP (Bring Your Own Pollen) Edition")
 
 if not user_token:
-    # --- AUTHENTICATION SCREEN ---
     st.info("Welcome! To protect developer budgets, this app uses Pollinations 'Bring Your Own Pollen'.")
     
-    # Dynamically find the current deployment URL to redirect users back correctly
-    current_url = st.empty()
-    # Fallback to local testing if not running on Streamlit Cloud
+    # CRITICAL: Replace this string with your exact live deployed Streamlit URL
+    # Leave it as http://localhost:8501 ONLY if you are testing on your local machine
     base_url = "https://flashcardgenbychibbit.streamlit.app/" 
     
-    # Construct the secure Pollinations authentication link
+    # Structured OAuth URL string pointing to the dedicated login engine
     auth_url = f"https://pollinations.ai{POLLINATIONS_APP_KEY}&redirect_uri={base_url}&response_type=token"
     
     st.markdown(
@@ -39,10 +35,9 @@ if not user_token:
         f'font-weight: bold;">🔑 Connect Your Pollinations Account</a>',
         unsafe_allow_html=True
     )
-    st.stop() # Freeze the app here until they click and return with a token
+    st.stop() 
 
 else:
-    # --- ACTIVE APPLICATION SCREEN ---
     st.success("🔒 Authenticated! Successfully utilizing your personal pollen balance.")
     
     if st.button("🔄 Log Out / Clear Session"):
@@ -51,14 +46,12 @@ else:
 
     st.markdown("---")
 
-    # Inputs
     topic = st.text_input("Enter a study topic:", "Human Anatomy")
     count = st.slider("Number of flashcards:", min_value=1, max_value=5, value=3)
 
     if st.button("Generate Deck ✨", type="primary"):
         with st.spinner("Generating flashcards and custom illustrations..."):
             
-            # Setup headers using the user's temporary secret key
             headers = {
                 "Authorization": f"Bearer {user_token}",
                 "Content-Type": "application/json"
@@ -76,15 +69,14 @@ else:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "model": "openai"
+                "model": "openai",
+                "jsonMode": True # Tells Pollinations text engine to output raw JSON
             }
             
             try:
-                # Request text data
                 res = requests.post(TEXT_API_URL, json=payload, headers=headers)
                 res.raise_for_status()
                 
-                # Clean up formatting anomalies
                 clean_text = res.text.strip()
                 if clean_text.startswith("```json"):
                     clean_text = clean_text.split("```json")[1].split("```")[0].strip()
@@ -93,13 +85,13 @@ else:
                 
                 flashcards = json.loads(clean_text)
                 
-                # Render deck to interface
                 for idx, card in enumerate(flashcards, 1):
                     with st.container():
                         st.markdown(f"### Card {idx}: {card['front']}")
                         
                         encoded_prompt = requests.utils.quote(card['image_prompt'])
-                        full_img_url = f"{IMAGE_API_URL}{encoded_prompt}?width=500&height=300&nologo=true"
+                        # Image generation via authenticated key parameter passing
+                        full_img_url = f"{IMAGE_API_URL}{encoded_prompt}?width=500&height=300&nologo=true&key={user_token}"
                         
                         col1, col2 = st.columns(2)
                         with col1:
@@ -110,4 +102,4 @@ else:
                         st.markdown("---")
                         
             except Exception as e:
-                st.error(f"Generation failed. Your key might be out of pollen or the response was malformed. Error: {e}")
+                st.error(f"Generation failed. Check your pollen balance or token validity. Error: {e}")
