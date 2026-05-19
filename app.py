@@ -5,19 +5,6 @@ import urllib.parse
 import json
 
 # ==========================================
-# PAGE SETUP
-# ==========================================
-
-st.set_page_config(
-    page_title="AI Flashcard Generator",
-    page_icon="🎴",
-    layout="centered"
-)
-
-st.title("🎴 AI Flashcard Generator")
-st.caption("🌸 Bring Your Own Pollen (Flower Tier)")
-
-# ==========================================
 # CONFIG
 # ==========================================
 
@@ -28,83 +15,91 @@ TEXT_API_URL = "https://gen.pollinations.ai/v1/chat/completions"
 IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
 
 # ==========================================
-# GET api_key FROM URL FRAGMENT
-# Pollinations returns:
-# site.com/#api_key=sk_xxx
+# PAGE
 # ==========================================
 
-fragment_value = components.html(
-    """
+st.set_page_config(
+    page_title="AI Flashcard Generator",
+    page_icon="🎴",
+    layout="centered"
+)
+
+st.title("🎴 AI Flashcard Generator")
+st.caption("🌸 Bring Your Own Pollen")
+
+# ==========================================
+# CONVERT:
+# #api_key=...
+# →
+# ?api_key=...
+#
+# Streamlit cannot read fragments
+# ==========================================
+
+components.html(
+"""
 <script>
+
 const hash = window.parent.location.hash;
 
-if(hash){
+if(hash && hash.includes("api_key=")){
 
     const params = new URLSearchParams(
         hash.substring(1)
     );
 
-    const key = params.get(
+    const key=params.get(
         "api_key"
     );
 
     if(key){
-        document.write(key);
+
+        const url =
+            new URL(
+                window.parent.location.href
+            );
+
+        url.hash="";
+
+        url.searchParams.set(
+            "api_key",
+            key
+        );
+
+        window.parent.location.replace(
+            url.toString()
+        );
     }
+
 }
+
 </script>
 """,
-    height=0
+height=0
 )
 
 # ==========================================
-# LOAD KEY
+# GET KEY
 # ==========================================
 
-api_key = ""
-
-query_key = st.query_params.get(
+api_key = st.query_params.get(
     "api_key",
     ""
 )
 
-if isinstance(query_key, list):
-    query_key = query_key[0]
+if isinstance(api_key,list):
+    api_key=api_key[0]
 
-query_key = str(query_key)
-
-if query_key:
-    api_key = query_key
-
-elif fragment_value:
-
-    api_key = str(
-        fragment_value
-    ).strip()
-
-# save login
-if api_key:
-    st.session_state[
-        "api_key"
-    ] = api_key
-
-# restore login
-if (
-    not api_key
-    and "api_key"
-    in st.session_state
-):
-    api_key = st.session_state[
-        "api_key"
-    ]
+api_key=str(api_key).strip()
 
 # ==========================================
-# LOGIN
+# LOGIN PAGE
 # ==========================================
 
 if not api_key:
 
-    auth_params = {
+    params = {
+
         "redirect_uri":
         APP_URL,
 
@@ -124,12 +119,12 @@ if not api_key:
     auth_url = (
         "https://enter.pollinations.ai/authorize?"
         + urllib.parse.urlencode(
-            auth_params
+            params
         )
     )
 
     st.info(
-        "Authenticate using your own Pollen account."
+        "Authenticate with Pollinations using your own Pollen balance."
     )
 
     st.link_button(
@@ -137,32 +132,41 @@ if not api_key:
         auth_url
     )
 
-    st.caption(
-        "Generation uses YOUR pollen balance."
-    )
-
     st.stop()
 
 # ==========================================
-# SUCCESS
+# LOGGED IN
 # ==========================================
 
-st.success(
-    "Logged in successfully"
-)
+st.success("Authenticated")
 
-if st.button(
-    "Logout"
-):
-
-    if "api_key" in st.session_state:
-        del st.session_state[
-            "api_key"
-        ]
+if st.button("Logout"):
 
     st.query_params.clear()
 
-    st.rerun()
+    components.html(
+    """
+    <script>
+
+    const url=
+        new URL(
+            window.parent.location.href
+        );
+
+    url.hash="";
+
+    url.search="";
+
+    window.parent.location.replace(
+        url.toString()
+    );
+
+    </script>
+    """,
+    height=0
+    )
+
+    st.stop()
 
 st.markdown("---")
 
@@ -170,12 +174,12 @@ st.markdown("---")
 # INPUTS
 # ==========================================
 
-topic = st.text_input(
+topic=st.text_input(
     "Study topic",
     "Neuroanatomy"
 )
 
-count = st.slider(
+count=st.slider(
     "Flashcards",
     1,
     10,
@@ -191,7 +195,8 @@ if st.button(
     type="primary"
 ):
 
-    headers = {
+    headers={
+
         "Authorization":
         f"Bearer {api_key}",
 
@@ -199,25 +204,25 @@ if st.button(
         "application/json"
     }
 
-    payload = {
+    payload={
 
-        "model":
-        "openai",
+        "model":"openai",
 
         "messages":[
+
             {
                 "role":"system",
 
                 "content":
 """
-Return ONLY valid JSON:
+Return ONLY valid JSON.
 
 [
-{
-"front":"",
-"back":"",
-"image_prompt":""
-}
+ {
+   "front":"question",
+   "back":"answer",
+   "image_prompt":"description"
+ }
 ]
 
 No markdown
@@ -241,7 +246,7 @@ No explanations
             "Generating..."
         ):
 
-            response = requests.post(
+            response=requests.post(
                 TEXT_API_URL,
                 headers=headers,
                 json=payload,
@@ -250,9 +255,9 @@ No explanations
 
             response.raise_for_status()
 
-            data = response.json()
+            data=response.json()
 
-            raw = (
+            raw=(
                 data["choices"][0]
                 ["message"]["content"]
                 .replace(
@@ -266,7 +271,7 @@ No explanations
                 .strip()
             )
 
-            cards = json.loads(
+            cards=json.loads(
                 raw
             )
 
@@ -279,31 +284,22 @@ No explanations
                 1
             ):
 
-                st.markdown(
-                    f"## Card {i}"
-                )
-
                 st.subheader(
-                    card["front"]
+                    f"Card {i}"
                 )
 
-                prompt = urllib.parse.quote(
-                    card[
-                        "image_prompt"
-                    ]
+                st.write(
+                    f"**Question:** {card['front']}"
                 )
 
-                image_url = (
-                    f"{IMAGE_API_URL}"
-                    f"{prompt}"
-                    f"?width=600"
-                    f"&height=350"
-                    f"&nologo=true"
+                image_url=(
+                    IMAGE_API_URL
+                    + urllib.parse.quote(
+                        card["image_prompt"]
+                    )
                 )
 
-                col1,col2=st.columns(
-                    2
-                )
+                col1,col2=st.columns(2)
 
                 with col1:
 
@@ -317,27 +313,21 @@ No explanations
                     with st.expander(
                         "Reveal Answer 🔍"
                     ):
-
                         st.write(
-                            card[
-                                "back"
-                            ]
+                            card["back"]
                         )
 
-                st.markdown(
-                    "---"
-                )
+                st.markdown("---")
 
     except Exception as e:
 
         st.error(
-            f"Error: {e}"
+            str(e)
         )
 
         try:
             st.json(
                 response.json()
             )
-
         except:
             pass
