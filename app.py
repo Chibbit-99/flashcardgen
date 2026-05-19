@@ -28,7 +28,7 @@ if not user_token:
     # Dynamically find the current deployment URL to redirect users back correctly
     current_url = st.empty()
     # Fallback to local testing if not running on Streamlit Cloud
-    base_url = "http://localhost:8501" 
+    base_url = "https://flashcardgenbychibbit.streamlit.app/" 
     
     # Construct the secure Pollinations authentication link
     auth_url = f"https://pollinations.ai{POLLINATIONS_APP_KEY}&redirect_uri={base_url}&response_type=token"
