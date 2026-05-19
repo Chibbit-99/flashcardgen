@@ -1,11 +1,7 @@
-import json
-import requests
-import urllib.parse
 import streamlit as st
-
-# ==========================================
-# PAGE
-# ==========================================
+import requests
+import json
+import urllib.parse
 
 st.set_page_config(
     page_title="AI Flashcard Generator",
@@ -13,52 +9,76 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("🎴 AI Flashcard Generator")
-st.caption("🏵️ Bring Your Own Pollen Edition")
-
 # ==========================================
 # CONFIG
 # ==========================================
 
-POLLINATIONS_APP_KEY = "pk_athvucdxshpixsqn"
+CLIENT_ID = "pk_athvucdxshpixsqn"
 
-MY_APP_URL = "https://flashcardgenbychibbit.streamlit.app"
+APP_URL = "https://flashcardgenbychibbit.streamlit.app"
 
-TEXT_API_URL = "https://text.pollinations.ai/v1/chat/completions"
+TEXT_API_URL = "https://gen.pollinations.ai/v1/chat/completions"
 IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
 
+st.title("🎴 AI Flashcard Generator")
+st.caption("🌸 Bring Your Own Pollen Edition")
+
 # ==========================================
-# AUTH
+# FRAGMENT HANDLING
 # ==========================================
 
-params = st.query_params
-user_token = params.get("token")
+st.markdown("""
+<script>
+const hash = window.location.hash.substring(1);
+const params = new URLSearchParams(hash);
 
-if not user_token:
+const apiKey = params.get("api_key");
 
-    st.info(
-        "Authenticate with Pollinations so generation uses YOUR pollen balance."
-    )
+if(apiKey){
 
-    redirect = urllib.parse.quote(
-        MY_APP_URL,
-        safe=""
-    )
+    const url=new URL(window.location);
+
+    url.searchParams.set(
+        "api_key",
+        apiKey
+    );
+
+    window.location=url;
+}
+</script>
+""", unsafe_allow_html=True)
+
+api_key = st.query_params.get("api_key")
+
+# ==========================================
+# LOGIN
+# ==========================================
+
+if not api_key:
+
+    auth_params = {
+        "redirect_uri": APP_URL,
+        "client_id": CLIENT_ID,
+        "scope":"usage",
+        "budget":"10",
+        "expiry":"7"
+    }
 
     auth_url = (
-        "https://auth.pollinations.ai/authorize?"
-        f"app_key={POLLINATIONS_APP_KEY}"
-        f"&redirect_uri={redirect}"
+        "https://enter.pollinations.ai/authorize?"
+        + urllib.parse.urlencode(auth_params)
+    )
+
+    st.info(
+        "Sign in to use your own Pollen balance."
     )
 
     st.link_button(
-        "🔐 Sign in with Pollinations",
+        "🌸 Sign in with Pollinations",
         auth_url
     )
 
-    # temporary debug
-    with st.expander("Debug URL"):
-        st.code(auth_url)
+    st.code(auth_url)
 
     st.stop()
 
@@ -66,14 +86,14 @@ if not user_token:
 # APP
 # ==========================================
 
-st.success("Authenticated via your Pollinations account")
+st.success("Authenticated")
 
 if st.button("Logout"):
     st.query_params.clear()
     st.rerun()
 
 topic = st.text_input(
-    "Study topic",
+    "Topic",
     "Neuroanatomy"
 )
 
@@ -89,52 +109,54 @@ if st.button(
     type="primary"
 ):
 
-    with st.spinner("Generating..."):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type":"application/json"
+    }
 
-        headers = {
-            "Authorization": f"Bearer {user_token}",
-            "Content-Type":"application/json"
-        }
-
-        payload = {
-            "model":"openai",
-            "messages":[
-                {
-                    "role":"system",
-                    "content":"""
-Return ONLY a JSON array.
+    payload = {
+        "model":"openai",
+        "messages":[
+            {
+                "role":"system",
+                "content":
+"""
+Return only valid JSON:
 
 [
- {
-   "front":"",
-   "back":"",
-   "image_prompt":""
- }
+{
+"front":"",
+"back":"",
+"image_prompt":""
+}
 ]
 """
-                },
-                {
-                    "role":"user",
-                    "content":
-                    f"Generate exactly {count} flashcards about {topic}"
-                }
-            ]
-        }
+            },
+            {
+                "role":"user",
+                "content":
+                f"Generate {count} flashcards about {topic}"
+            }
+        ]
+    }
 
-        try:
+    try:
+
+        with st.spinner(
+            "Generating..."
+        ):
 
             r = requests.post(
                 TEXT_API_URL,
                 headers=headers,
-                json=payload,
-                timeout=60
+                json=payload
             )
 
             r.raise_for_status()
 
-            data = r.json()
+            data=r.json()
 
-            raw = (
+            text=(
                 data["choices"][0]
                 ["message"]["content"]
                 .replace("```json","")
@@ -142,37 +164,34 @@ Return ONLY a JSON array.
                 .strip()
             )
 
-            cards = json.loads(raw)
+            cards=json.loads(text)
 
-            for i, card in enumerate(cards,1):
+            for i,card in enumerate(cards,1):
 
                 st.subheader(
                     f"Card {i}: {card['front']}"
                 )
 
-                prompt = urllib.parse.quote(
+                prompt=urllib.parse.quote(
                     card["image_prompt"]
                 )
 
-                image_url = (
+                img=(
                     f"{IMAGE_API_URL}{prompt}"
-                    f"?key={user_token}"
-                    f"&width=600"
+                    f"?width=600"
                     f"&height=300"
                     f"&nologo=true"
                 )
 
-                col1,col2 = st.columns(2)
+                col1,col2=st.columns(2)
 
                 with col1:
-
                     st.image(
-                        image_url,
+                        img,
                         use_container_width=True
                     )
 
                 with col2:
-
                     with st.expander(
                         "Reveal Answer"
                     ):
@@ -182,11 +201,5 @@ Return ONLY a JSON array.
 
                 st.markdown("---")
 
-        except Exception as e:
-
-            st.error(str(e))
-
-            try:
-                st.json(r.json())
-            except:
-                st.write(r.text)
+    except Exception as e:
+        st.error(str(e))
