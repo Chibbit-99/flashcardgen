@@ -1,13 +1,20 @@
 import streamlit as st
 import requests
-import json
 import urllib.parse
+import json
+
+# ==========================================
+# PAGE
+# ==========================================
 
 st.set_page_config(
     page_title="AI Flashcard Generator",
     page_icon="🎴",
     layout="centered"
 )
+
+st.title("🎴 AI Flashcard Generator")
+st.caption("🌸 Bring Your Own Pollen Edition")
 
 # ==========================================
 # CONFIG
@@ -20,39 +27,44 @@ APP_URL = "https://flashcardgenbychibbit.streamlit.app"
 TEXT_API_URL = "https://gen.pollinations.ai/v1/chat/completions"
 IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
 
-st.title("🎴 AI Flashcard Generator")
-st.caption("🌸 Bring Your Own Pollen Edition")
-
 # ==========================================
-# FRAGMENT HANDLING
+# MOVE #api_key TO ?api_key
+# Streamlit cannot read fragments
 # ==========================================
 
 st.markdown("""
 <script>
-const hash = window.location.hash.substring(1);
-const params = new URLSearchParams(hash);
+(function(){
 
-const apiKey = params.get("api_key");
+    const hash = window.location.hash.slice(1);
 
-if(apiKey){
+    if(!hash) return;
 
-    const url=new URL(window.location);
+    const params = new URLSearchParams(hash);
 
-    url.searchParams.set(
-        "api_key",
-        apiKey
-    );
+    const apiKey = params.get("api_key");
 
-    window.location=url;
-}
+    if(apiKey){
+
+        const url = new URL(window.location);
+
+        url.searchParams.set(
+            "api_key",
+            apiKey
+        );
+
+        window.location.href=url;
+    }
+
+})();
 </script>
 """, unsafe_allow_html=True)
 
-api_key = st.query_params.get("api_key")
+# ==========================================
+# AUTH
+# ==========================================
 
-# ==========================================
-# LOGIN
-# ==========================================
+api_key = st.query_params.get("api_key")
 
 if not api_key:
 
@@ -70,7 +82,7 @@ if not api_key:
     )
 
     st.info(
-        "Sign in to use your own Pollen balance."
+        "Authenticate using your own Pollen balance."
     )
 
     st.link_button(
@@ -78,31 +90,47 @@ if not api_key:
         auth_url
     )
 
-    st.code(auth_url)
+    st.caption(
+        "Usage is charged to your own account."
+    )
 
     st.stop()
 
 # ==========================================
-# APP
+# AUTH SUCCESS
 # ==========================================
 
-st.success("Authenticated")
+st.success(
+    "Authenticated"
+)
 
 if st.button("Logout"):
+
     st.query_params.clear()
+
     st.rerun()
 
+st.markdown("---")
+
+# ==========================================
+# INPUTS
+# ==========================================
+
 topic = st.text_input(
-    "Topic",
-    "Neuroanatomy"
+    "Study topic",
+    value="Neuroanatomy"
 )
 
 count = st.slider(
-    "Cards",
-    1,
-    10,
-    3
+    "Flashcards",
+    min_value=1,
+    max_value=10,
+    value=3
 )
+
+# ==========================================
+# GENERATE
+# ==========================================
 
 if st.button(
     "Generate Deck ✨",
@@ -121,21 +149,25 @@ if st.button(
                 "role":"system",
                 "content":
 """
-Return only valid JSON:
+Return ONLY valid JSON.
 
 [
-{
-"front":"",
-"back":"",
-"image_prompt":""
-}
+ {
+   "front":"question",
+   "back":"answer",
+   "image_prompt":"description"
+ }
 ]
+
+No markdown.
+No code blocks.
+No explanations.
 """
             },
             {
                 "role":"user",
                 "content":
-                f"Generate {count} flashcards about {topic}"
+                f"Generate exactly {count} flashcards about {topic}"
             }
         ]
     }
@@ -143,20 +175,21 @@ Return only valid JSON:
     try:
 
         with st.spinner(
-            "Generating..."
+            "Generating flashcards..."
         ):
 
-            r = requests.post(
+            response = requests.post(
                 TEXT_API_URL,
                 headers=headers,
-                json=payload
+                json=payload,
+                timeout=60
             )
 
-            r.raise_for_status()
+            response.raise_for_status()
 
-            data=r.json()
+            data = response.json()
 
-            text=(
+            raw = (
                 data["choices"][0]
                 ["message"]["content"]
                 .replace("```json","")
@@ -164,37 +197,49 @@ Return only valid JSON:
                 .strip()
             )
 
-            cards=json.loads(text)
+            cards = json.loads(raw)
+
+            st.success(
+                f"Generated {len(cards)} cards"
+            )
 
             for i,card in enumerate(cards,1):
 
-                st.subheader(
-                    f"Card {i}: {card['front']}"
+                st.markdown(
+                    f"## Card {i}"
                 )
 
-                prompt=urllib.parse.quote(
+                st.subheader(
+                    card["front"]
+                )
+
+                encoded = urllib.parse.quote(
                     card["image_prompt"]
                 )
 
-                img=(
-                    f"{IMAGE_API_URL}{prompt}"
+                image_url = (
+                    f"{IMAGE_API_URL}{encoded}"
                     f"?width=600"
-                    f"&height=300"
+                    f"&height=350"
                     f"&nologo=true"
+                    f"&seed={i}"
                 )
 
-                col1,col2=st.columns(2)
+                col1,col2 = st.columns(2)
 
                 with col1:
+
                     st.image(
-                        img,
+                        image_url,
                         use_container_width=True
                     )
 
                 with col2:
+
                     with st.expander(
-                        "Reveal Answer"
+                        "Reveal Answer 🔍"
                     ):
+
                         st.write(
                             card["back"]
                         )
@@ -202,4 +247,14 @@ Return only valid JSON:
                 st.markdown("---")
 
     except Exception as e:
-        st.error(str(e))
+
+        st.error(
+            f"Generation failed:\n{str(e)}"
+        )
+
+        try:
+            st.json(
+                response.json()
+            )
+        except:
+            pass
