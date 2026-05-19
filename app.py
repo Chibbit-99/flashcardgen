@@ -1,6 +1,6 @@
 import json
-import urllib.parse
 import requests
+import urllib.parse
 import streamlit as st
 
 # ==========================================
@@ -13,74 +13,105 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("🎴 AI Flashcard Deck Generator")
-st.caption("⚡ Powered by Pollinations")
+st.title("🎴 AI Flashcard Generator")
+st.caption("🏵️ Bring Your Own Pollen Edition")
 
 # ==========================================
 # CONFIG
 # ==========================================
 
-# your publishable key
-API_KEY = "pk_athvucdxshpixsqn"
+POLLINATIONS_APP_KEY = "pk_athvucdxshpixsqn"
 
-# OpenAI-compatible endpoint
+MY_APP_URL = "https://flashcardgenbychibbit.streamlit.app"
+
 TEXT_API_URL = "https://text.pollinations.ai/v1/chat/completions"
-
 IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
 
 # ==========================================
-# UI
+# AUTH
 # ==========================================
+
+params = st.query_params
+user_token = params.get("token")
+
+if not user_token:
+
+    st.info(
+        "Authenticate with Pollinations so generation uses YOUR pollen balance."
+    )
+
+    redirect = urllib.parse.quote(
+        MY_APP_URL,
+        safe=""
+    )
+
+    auth_url = (
+        "https://auth.pollinations.ai/authorize?"
+        f"app_key={POLLINATIONS_APP_KEY}"
+        f"&redirect_url={redirect}"
+    )
+
+    st.link_button(
+        "🔐 Sign in with Pollinations",
+        auth_url
+    )
+
+    # temporary debug
+    with st.expander("Debug URL"):
+        st.code(auth_url)
+
+    st.stop()
+
+# ==========================================
+# APP
+# ==========================================
+
+st.success("Authenticated via your Pollinations account")
+
+if st.button("Logout"):
+    st.query_params.clear()
+    st.rerun()
 
 topic = st.text_input(
     "Study topic",
-    value="Neuroanatomy"
+    "Neuroanatomy"
 )
 
 count = st.slider(
-    "Number of flashcards",
+    "Cards",
     1,
     10,
     3
 )
 
-# ==========================================
-# GENERATE
-# ==========================================
+if st.button(
+    "Generate Deck ✨",
+    type="primary"
+):
 
-if st.button("Generate Deck ✨", type="primary"):
-
-    with st.spinner("Generating flashcards..."):
+    with st.spinner("Generating..."):
 
         headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json"
+            "Authorization": f"Bearer {user_token}",
+            "Content-Type":"application/json"
         }
 
-        system_prompt = """
-Return ONLY a valid JSON array.
-
-Format:
+        payload = {
+            "model":"openai",
+            "messages":[
+                {
+                    "role":"system",
+                    "content":"""
+Return ONLY a JSON array.
 
 [
  {
-   "front":"question",
-   "back":"answer",
-   "image_prompt":"image description"
+   "front":"",
+   "back":"",
+   "image_prompt":""
  }
 ]
-
-No markdown.
-No explanation.
-No code fences.
 """
-
-        payload = {
-            "model": "openai",
-            "messages": [
-                {
-                    "role":"system",
-                    "content":system_prompt
                 },
                 {
                     "role":"user",
@@ -92,16 +123,16 @@ No code fences.
 
         try:
 
-            response = requests.post(
+            r = requests.post(
                 TEXT_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=60
             )
 
-            response.raise_for_status()
+            r.raise_for_status()
 
-            data = response.json()
+            data = r.json()
 
             raw = (
                 data["choices"][0]
@@ -111,32 +142,24 @@ No code fences.
                 .strip()
             )
 
-            flashcards = json.loads(raw)
+            cards = json.loads(raw)
 
-            for i, card in enumerate(
-                flashcards,
-                start=1
-            ):
-
-                st.markdown(
-                    f"## Card {i}"
-                )
+            for i, card in enumerate(cards,1):
 
                 st.subheader(
-                    card["front"]
+                    f"Card {i}: {card['front']}"
                 )
 
-                encoded = urllib.parse.quote(
+                prompt = urllib.parse.quote(
                     card["image_prompt"]
                 )
 
                 image_url = (
-                    f"{IMAGE_API_URL}"
-                    f"{encoded}"
-                    f"?width=600"
-                    f"&height=350"
+                    f"{IMAGE_API_URL}{prompt}"
+                    f"?key={user_token}"
+                    f"&width=600"
+                    f"&height=300"
                     f"&nologo=true"
-                    f"&key={API_KEY}"
                 )
 
                 col1,col2 = st.columns(2)
@@ -161,15 +184,9 @@ No code fences.
 
         except Exception as e:
 
-            st.error(
-                f"Error:\n{e}"
-            )
-
-            st.write(
-                "Raw response:"
-            )
+            st.error(str(e))
 
             try:
-                st.json(response.json())
+                st.json(r.json())
             except:
-                st.write(response.text)
+                st.write(r.text)
