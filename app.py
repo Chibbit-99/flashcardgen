@@ -1,10 +1,10 @@
 import json
-import requests
 import urllib.parse
+import requests
 import streamlit as st
 
 # ==========================================
-# PAGE SETUP
+# PAGE
 # ==========================================
 
 st.set_page_config(
@@ -13,95 +13,52 @@ st.set_page_config(
     layout="centered"
 )
 
+st.title("🎴 AI Flashcard Deck Generator")
+st.caption("⚡ Powered by Pollinations")
+
 # ==========================================
 # CONFIG
 # ==========================================
 
-POLLINATIONS_APP_KEY = "pk_athvucdxshpixsqn"
+# your publishable key
+API_KEY = "pk_athvucdxshpixsqn"
 
-# no trailing slash
-MY_APP_LIVE_URL = "https://flashcardgenbychibbit.streamlit.app"
+# OpenAI-compatible endpoint
+TEXT_API_URL = "https://text.pollinations.ai/v1/chat/completions"
 
-# actual endpoints
-TEXT_API_URL = "https://text.pollinations.ai/openai"
 IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
 
 # ==========================================
-# GET AUTH TOKEN
+# UI
 # ==========================================
-
-query_params = st.query_params
-user_token = query_params.get("token")
-
-st.title("🎴 AI Flashcard Deck Generator")
-st.caption("⚡ Powered by Pollinations.ai")
-
-# ==========================================
-# LOGIN SCREEN
-# ==========================================
-
-if not user_token:
-
-    st.info(
-        "👋 Welcome! Authenticate using your Pollinations account."
-    )
-
-    auth_url = (
-        "https://pollinations.ai/auth?"
-        f"key={POLLINATIONS_APP_KEY}"
-        f"&redirect_uri={urllib.parse.quote(MY_APP_LIVE_URL)}"
-        "&response_type=token"
-    )
-
-    st.link_button(
-        "🔐 Authenticate with Pollinations",
-        auth_url
-    )
-
-    st.stop()
-
-# ==========================================
-# APP
-# ==========================================
-
-st.success("Authenticated")
-
-if st.button("Disconnect Session"):
-    st.query_params.clear()
-    st.rerun()
-
-st.markdown("---")
 
 topic = st.text_input(
-    "Enter a study topic:",
-    "Neuroanatomy"
+    "Study topic",
+    value="Neuroanatomy"
 )
 
 count = st.slider(
     "Number of flashcards",
-    min_value=1,
-    max_value=10,
-    value=3
+    1,
+    10,
+    3
 )
 
 # ==========================================
 # GENERATE
 # ==========================================
 
-if st.button(
-    "Generate Deck ✨",
-    type="primary"
-):
+if st.button("Generate Deck ✨", type="primary"):
 
-    with st.spinner("Generating..."):
+    with st.spinner("Generating flashcards..."):
 
         headers = {
-            "Authorization": f"Bearer {user_token}",
+            "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json"
         }
 
         system_prompt = """
-Return ONLY valid JSON.
+Return ONLY a valid JSON array.
 
 Format:
 
@@ -109,19 +66,14 @@ Format:
  {
    "front":"question",
    "back":"answer",
-   "image_prompt":"description"
+   "image_prompt":"image description"
  }
 ]
 
 No markdown.
-No explanations.
-No code blocks.
+No explanation.
+No code fences.
 """
-
-        user_prompt = (
-            f"Generate exactly {count} flashcards "
-            f"about {topic}"
-        )
 
         payload = {
             "model": "openai",
@@ -132,7 +84,8 @@ No code blocks.
                 },
                 {
                     "role":"user",
-                    "content":user_prompt
+                    "content":
+                    f"Generate exactly {count} flashcards about {topic}"
                 }
             ]
         }
@@ -150,38 +103,17 @@ No code blocks.
 
             data = response.json()
 
-            # safer extraction
-            raw_text = (
-                data
-                .get("choices",[{}])[0]
-                .get("message",{})
-                .get("content","")
-                .strip()
-            )
-
-            # remove accidental markdown wrappers
-            raw_text = (
-                raw_text
+            raw = (
+                data["choices"][0]
+                ["message"]["content"]
                 .replace("```json","")
                 .replace("```","")
                 .strip()
             )
 
-            flashcards = json.loads(raw_text)
+            flashcards = json.loads(raw)
 
-            if not isinstance(
-                flashcards,
-                list
-            ):
-                raise Exception(
-                    "AI did not return a list"
-                )
-
-            st.success(
-                f"Generated {len(flashcards)} cards"
-            )
-
-            for i,card in enumerate(
+            for i, card in enumerate(
                 flashcards,
                 start=1
             ):
@@ -198,24 +130,26 @@ No code blocks.
                     card["image_prompt"]
                 )
 
-                img_url = (
+                image_url = (
                     f"{IMAGE_API_URL}"
                     f"{encoded}"
-                    "?width=500"
-                    "&height=300"
-                    "&nologo=true"
+                    f"?width=600"
+                    f"&height=350"
+                    f"&nologo=true"
+                    f"&key={API_KEY}"
                 )
 
                 col1,col2 = st.columns(2)
 
                 with col1:
+
                     st.image(
-                        img_url,
-                        caption="Concept Image",
+                        image_url,
                         use_container_width=True
                     )
 
                 with col2:
+
                     with st.expander(
                         "Reveal Answer"
                     ):
@@ -228,5 +162,14 @@ No code blocks.
         except Exception as e:
 
             st.error(
-                f"Error:\n\n{str(e)}"
+                f"Error:\n{e}"
             )
+
+            st.write(
+                "Raw response:"
+            )
+
+            try:
+                st.json(response.json())
+            except:
+                st.write(response.text)
