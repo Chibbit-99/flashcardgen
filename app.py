@@ -2,21 +2,21 @@ import json
 import requests
 import streamlit as st
 
-# 1. Page Layout
+# Page configuration layout
 st.set_page_config(page_title="AI Flashcard Generator", page_icon="🎴", layout="centered")
 
 # ==========================================
-# ⚙️ CONFIGURATION - SET THESE ONCE!
+# ⚙️ RE-ENTER BOTH OF YOUR CORRECT URLs BELOW
 # ==========================================
 POLLINATIONS_APP_KEY = "pk_athvucdxshpixsqn"  
 
-# CRITICAL: Replace this string with your exact live deployed Streamlit URL
-# Examples: "https://streamlit.app" or "http://localhost:8501" if testing locally
+# 🛑 CRITICAL STEP: Replace this with your exact Streamlit cloud website address!
+# Examples: "https://streamlit.app" or "http://localhost:8501"
 MY_APP_LIVE_URL = "https://flashcardgenbychibbit.streamlit.app/" 
 # ==========================================
 
 # Official Unified Pollinations V2 API Endpoints
-TEXT_API_URL = "https://gen.pollinations.ai/v1/chat/completions"
+TEXT_API_URL = "https://pollinations.ai"
 IMAGE_API_URL = "https://gen.pollinations.ai/image/"
 
 # Grab redirect token safely from query strings
@@ -30,17 +30,13 @@ if not user_token:
     # --- AUTHENTICATION SCREEN ---
     st.info("👋 Welcome! To protect server budgets, this application uses 'Bring Your Own Pollen'.")
     
-    # Perfectly structured OAuth 2.0 URL using the correct query parameters
+    # 🌟 FIXED LINK CONFIGURATION - No string parsing injection inside the markdown block 
     auth_url = f"https://pollinations.ai{POLLINATIONS_APP_KEY}&redirect_uri={MY_APP_LIVE_URL}&response_type=token"
     
-    st.markdown(
-        f'<a href="{auth_url}" target="_self" style="display: inline-block; padding: 0.6em 1.2em; '
-        f'color: white; background-color: #FF4B4B; border-radius: 6px; text-decoration: none; '
-        f'font-weight: bold; text-align: center; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">'
-        f'🔑 Connect Your Pollinations Account</a>',
-        unsafe_allow_html=True
-    )
-    st.stop()  # Halt execution until token lands
+    # Render link inside a clean text box instead of raw HTML to bypass parsing glitches
+    st.markdown(f"### [🔗 Click Here to Authenticate with Pollinations]({auth_url})")
+    st.caption("This link will securely open your Pollinations profile dashboard to grant permissions.")
+    st.stop()  
 
 else:
     # --- ACTIVE GENERATOR APPLICATION ---
@@ -86,7 +82,6 @@ else:
                 response_json = res.json()
                 raw_text = response_json['choices']['message']['content'].strip()
                 
-                # Cleanup any accidental code block backticks
                 if raw_text.startswith("```json"):
                     raw_text = raw_text.split("```json").split("```").strip()
                 elif raw_text.startswith("```"):
@@ -94,7 +89,6 @@ else:
                 
                 flashcards = json.loads(raw_text)
                 
-                # Render results to the Streamlit UI dashboard
                 for idx, card in enumerate(flashcards, 1):
                     with st.container():
                         st.markdown(f"### Card {idx}: {card['front']}")
