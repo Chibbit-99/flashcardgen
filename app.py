@@ -13,7 +13,7 @@ st.set_page_config(
 # CONFIG
 # ==========================================
 
-CLIENT_ID = "pk_athvucdxshpixsqn"
+CLIENT_ID = "pk_AthVUCdXSHpixSqN"
 
 APP_URL = "https://flashcardgenbychibbit.streamlit.app"
 
