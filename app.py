@@ -48,7 +48,7 @@ if not user_token:
     auth_url = (
         "https://auth.pollinations.ai/authorize?"
         f"app_key={POLLINATIONS_APP_KEY}"
-        f"&redirect_url={redirect}"
+        f"&redirect_uri={redirect}"
     )
 
     st.link_button(
