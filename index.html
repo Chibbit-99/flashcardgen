@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Flashcards</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: auto;
+        padding: 20px;
+        background: #0f0f14;
+        color: white;
+    }
+
+    h1 {
+        text-align: center;
+    }
+
+    button, input {
+        padding: 10px;
+        margin: 5px;
+        border-radius: 8px;
+        border: none;
+    }
+
+    button {
+        cursor: pointer;
+        background: #6c5ce7;
+        color: white;
+    }
+
+    .card {
+        background: #1c1c28;
+        padding: 15px;
+        margin-top: 10px;
+        border-radius: 10px;
+    }
+
+    img {
+        max-width: 100%;
+        border-radius: 10px;
+        margin-top: 10px;
+    }
+
+    #app {
+        display: none;
+    }
+
+    #loginBox {
+        text-align: center;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>🎴 AI Flashcards</h1>
+
+<div id="loginBox">
+    <button onclick="login()">Login with Pollinations</button>
+</div>
+
+<div id="app">
+    <input id="topic" placeholder="Enter topic">
+    <button onclick="generate()">Generate</button>
+
+    <div id="output"></div>
+</div>
+
+<script>
+
+// ==========================
+// CONFIG
+// ==========================
+const CLIENT_ID = "pk_YOUR_KEY_HERE";
+
+// ==========================
+// GET API KEY FROM URL HASH
+// ==========================
+let apiKey = null;
+
+(function () {
+    const hash = window.location.hash;
+
+    if (hash.includes("api_key=")) {
+        const params = new URLSearchParams(hash.slice(1));
+        apiKey = params.get("api_key");
+
+        // clean URL
+        window.history.replaceState({}, document.title, "/");
+
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("app").style.display = "block";
+    }
+})();
+
+// ==========================
+// LOGIN
+// ==========================
+function login() {
+    const url =
+        "https://enter.pollinations.ai/authorize?" +
+        new URLSearchParams({
+            client_id: CLIENT_ID,
+            redirect_uri: window.location.href
+        });
+
+    window.location.href = url;
+}
+
+// ==========================
+// GENERATE FLASHCARDS
+// ==========================
+async function generate() {
+
+    const topic = document.getElementById("topic").value;
+
+    const res = await fetch(
+        "https://gen.pollinations.ai/v1/chat/completions",
+        {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + apiKey,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "openai",
+                messages: [
+                    {
+                        role: "system",
+                        content:
+                        "Return ONLY JSON array with front, back, image_prompt"
+                    },
+                    {
+                        role: "user",
+                        content:
+                        "Create 3 flashcards about " + topic
+                    }
+                ]
+            })
+        }
+    );
+
+    const data = await res.json();
+
+    let raw = data.choices[0].message.content
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+    let cards = JSON.parse(raw);
+
+    const out = document.getElementById("output");
+    out.innerHTML = "";
+
+    cards.forEach(card => {
+
+        const div = document.createElement("div");
+        div.className = "card";
+
+        const img = "https://image.pollinations.ai/prompt/"
+            + encodeURIComponent(card.image_prompt);
+
+        div.innerHTML = `
+            <h3>${card.front}</h3>
+            <img src="${img}">
+            <p><b>Answer:</b> ${card.back}</p>
+        `;
+
+        out.appendChild(div);
+    });
+}
+
+</script>
+
+</body>
+</html>
