@@ -28,109 +28,69 @@ st.title("🎴 AI Flashcard Generator")
 st.caption("🌸 Bring Your Own Pollen")
 
 # ==========================================
-# CONVERT:
-# #api_key=...
-# →
-# ?api_key=...
-#
-# Streamlit cannot read fragments
+# 🔥 JS: convert #api_key → ?api_key
 # ==========================================
 
 components.html(
 """
 <script>
+(function () {
 
-const hash = window.parent.location.hash;
+    const hash = window.location.hash;
 
-if(hash && hash.includes("api_key=")){
+    if (hash.includes("api_key=")) {
 
-    const params = new URLSearchParams(
-        hash.substring(1)
-    );
+        const params = new URLSearchParams(hash.slice(1));
+        const key = params.get("api_key");
 
-    const key=params.get(
-        "api_key"
-    );
+        if (key) {
+            const url = new URL(window.location.href);
 
-    if(key){
+            url.hash = "";
+            url.searchParams.set("api_key", key);
 
-        const url =
-            new URL(
-                window.parent.location.href
-            );
-
-        url.hash="";
-
-        url.searchParams.set(
-            "api_key",
-            key
-        );
-
-        window.parent.location.replace(
-            url.toString()
-        );
+            // reload into Streamlit-friendly URL
+            window.location.replace(url.toString());
+        }
     }
 
-}
-
+})();
 </script>
 """,
 height=0
 )
 
 # ==========================================
-# GET KEY
+# READ KEY (Streamlit side)
 # ==========================================
 
-api_key = st.query_params.get(
-    "api_key",
-    ""
-)
+api_key = st.query_params.get("api_key", "")
 
-if isinstance(api_key,list):
-    api_key=api_key[0]
+if isinstance(api_key, list):
+    api_key = api_key[0]
 
-api_key=str(api_key).strip()
+api_key = str(api_key).strip()
 
 # ==========================================
-# LOGIN PAGE
+# LOGIN SCREEN
 # ==========================================
 
 if not api_key:
 
-    params = {
-
-        "redirect_uri":
-        APP_URL,
-
-        "client_id":
-        CLIENT_ID,
-
-        "scope":
-        "usage",
-
-        "budget":
-        "10",
-
-        "expiry":
-        "7"
-    }
-
     auth_url = (
         "https://enter.pollinations.ai/authorize?"
-        + urllib.parse.urlencode(
-            params
-        )
+        + urllib.parse.urlencode({
+            "redirect_uri": APP_URL,
+            "client_id": CLIENT_ID,
+            "scope": "usage",
+            "budget": "10",
+            "expiry": "7"
+        })
     )
 
-    st.info(
-        "Authenticate with Pollinations using your own Pollen balance."
-    )
+    st.info("Sign in with Pollinations to use your own Pollen")
 
-    st.link_button(
-        "🌸 Sign in with Pollinations",
-        auth_url
-    )
+    st.link_button("🌸 Login", auth_url)
 
     st.stop()
 
@@ -145,25 +105,15 @@ if st.button("Logout"):
     st.query_params.clear()
 
     components.html(
-    """
-    <script>
-
-    const url=
-        new URL(
-            window.parent.location.href
-        );
-
-    url.hash="";
-
-    url.search="";
-
-    window.parent.location.replace(
-        url.toString()
-    );
-
-    </script>
-    """,
-    height=0
+        """
+        <script>
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = "";
+        window.location.replace(url.toString());
+        </script>
+        """,
+        height=0
     )
 
     st.stop()
@@ -174,160 +124,89 @@ st.markdown("---")
 # INPUTS
 # ==========================================
 
-topic=st.text_input(
-    "Study topic",
-    "Neuroanatomy"
-)
-
-count=st.slider(
-    "Flashcards",
-    1,
-    10,
-    3
-)
+topic = st.text_input("Topic", "Neuroanatomy")
+count = st.slider("Cards", 1, 10, 3)
 
 # ==========================================
 # GENERATE
 # ==========================================
 
-if st.button(
-    "Generate Deck ✨",
-    type="primary"
-):
+if st.button("Generate Deck ✨"):
 
-    headers={
-
-        "Authorization":
-        f"Bearer {api_key}",
-
-        "Content-Type":
-        "application/json"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
 
-    payload={
-
-        "model":"openai",
-
-        "messages":[
-
+    payload = {
+        "model": "openai",
+        "messages": [
             {
-                "role":"system",
-
-                "content":
-"""
-Return ONLY valid JSON.
+                "role": "system",
+                "content": """
+Return ONLY valid JSON:
 
 [
- {
-   "front":"question",
-   "back":"answer",
-   "image_prompt":"description"
- }
+ {"front":"","back":"","image_prompt":""}
 ]
 
-No markdown
-No code blocks
-No explanations
+No markdown, no explanation.
 """
             },
-
             {
-                "role":"user",
-
-                "content":
-                f"Generate exactly {count} flashcards about {topic}"
+                "role": "user",
+                "content": f"Generate {count} flashcards about {topic}"
             }
         ]
     }
 
     try:
+        with st.spinner("Generating..."):
 
-        with st.spinner(
-            "Generating..."
-        ):
-
-            response=requests.post(
+            r = requests.post(
                 TEXT_API_URL,
                 headers=headers,
                 json=payload,
                 timeout=60
             )
 
-            response.raise_for_status()
+            r.raise_for_status()
 
-            data=response.json()
+            data = r.json()
 
-            raw=(
-                data["choices"][0]
-                ["message"]["content"]
-                .replace(
-                    "```json",
-                    ""
-                )
-                .replace(
-                    "```",
-                    ""
-                )
+            raw = (
+                data["choices"][0]["message"]["content"]
+                .replace("```json", "")
+                .replace("```", "")
                 .strip()
             )
 
-            cards=json.loads(
-                raw
-            )
+            cards = json.loads(raw)
 
-            st.success(
-                f"Generated {len(cards)} cards"
-            )
+            st.success(f"Generated {len(cards)} cards")
 
-            for i,card in enumerate(
-                cards,
-                1
-            ):
+            for i, card in enumerate(cards, 1):
 
-                st.subheader(
-                    f"Card {i}"
-                )
+                st.subheader(f"Card {i}")
+                st.write(card["front"])
 
-                st.write(
-                    f"**Question:** {card['front']}"
-                )
+                img = IMAGE_API_URL + urllib.parse.quote(card["image_prompt"])
 
-                image_url=(
-                    IMAGE_API_URL
-                    + urllib.parse.quote(
-                        card["image_prompt"]
-                    )
-                )
-
-                col1,col2=st.columns(2)
+                col1, col2 = st.columns(2)
 
                 with col1:
-
-                    st.image(
-                        image_url,
-                        use_container_width=True
-                    )
+                    st.image(img, use_container_width=True)
 
                 with col2:
-
-                    with st.expander(
-                        "Reveal Answer 🔍"
-                    ):
-                        st.write(
-                            card["back"]
-                        )
+                    with st.expander("Answer"):
+                        st.write(card["back"])
 
                 st.markdown("---")
 
     except Exception as e:
-
-        st.error(
-            str(e)
-        )
+        st.error(str(e))
 
         try:
-            st.json(
-                response.json()
-            )
+            st.json(r.json())
         except:
             pass
