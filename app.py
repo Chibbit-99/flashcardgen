@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import urllib.parse
 import json
@@ -8,7 +9,6 @@ import json
 # ==========================================
 
 CLIENT_ID = "pk_AthVUCdXSHpixSqN"
-
 APP_URL = "https://flashcardgenbychibbit.streamlit.app/"
 
 TEXT_API_URL = "https://gen.pollinations.ai/v1/chat/completions"
@@ -21,16 +21,59 @@ st.set_page_config(
 )
 
 st.title("🎴 AI Flashcard Generator")
-st.caption("🌸 Bring Your Own Pollen (Streamlit-safe version)")
 
 # ==========================================
-# AUTH LINK
+# 🔥 CRITICAL FIX: FRAGMENT CAPTURE
+# ==========================================
+
+components.html(
+"""
+<script>
+(function () {
+
+    const hash = window.location.hash;
+
+    if (!hash.includes("api_key=")) return;
+
+    const params = new URLSearchParams(hash.slice(1));
+    const key = params.get("api_key");
+
+    if (!key) return;
+
+    // store in real URL (this is what Streamlit can read)
+    const url = new URL(window.location.href);
+
+    url.hash = "";
+    url.searchParams.set("api_key", key);
+
+    // IMPORTANT: full reload so Streamlit re-runs Python
+    window.location.href = url.toString();
+
+})();
+</script>
+""",
+height=0
+)
+
+# ==========================================
+# READ KEY (ONLY QUERY PARAM)
+# ==========================================
+
+api_key = st.query_params.get("api_key", "")
+
+if isinstance(api_key, list):
+    api_key = api_key[0]
+
+api_key = str(api_key).strip()
+
+# ==========================================
+# LOGIN
 # ==========================================
 
 auth_url = (
     "https://enter.pollinations.ai/authorize?"
     + urllib.parse.urlencode({
-        "redirect_uri": APP_URL,   # MUST be clean URL (no #)
+        "redirect_uri": APP_URL,
         "client_id": CLIENT_ID,
         "scope": "usage",
         "budget": "10",
@@ -38,52 +81,42 @@ auth_url = (
     })
 )
 
-# ==========================================
-# READ KEY (ONLY QUERY PARAMS)
-# ==========================================
-
-api_key = st.query_params.get("api_key")
-
-if isinstance(api_key, list):
-    api_key = api_key[0]
-
-api_key = (api_key or "").strip()
-
-# ==========================================
-# LOGIN SCREEN
-# ==========================================
-
 if not api_key:
 
-    st.info("Sign in to use your own Pollen balance.")
+    st.info("Login required to use your Pollen balance.")
 
-    st.link_button(
-        "🌸 Login with Pollinations",
-        auth_url
-    )
+    st.link_button("🌸 Login with Pollinations", auth_url)
 
     st.stop()
 
 # ==========================================
-# LOGGED IN
+# APP
 # ==========================================
 
 st.success("Authenticated")
 
 if st.button("Logout"):
 
-    # clear URL + rerun clean
     st.query_params.clear()
-    st.rerun()
+
+    components.html(
+        """
+        <script>
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = "";
+        window.location.href = url.toString();
+        </script>
+        """,
+        height=0
+    )
+
+    st.stop()
 
 st.markdown("---")
 
-# ==========================================
-# INPUTS
-# ==========================================
-
-topic = st.text_input("Study topic", "Neuroanatomy")
-count = st.slider("Flashcards", 1, 10, 3)
+topic = st.text_input("Topic", "Neuroanatomy")
+count = st.slider("Cards", 1, 10, 3)
 
 # ==========================================
 # GENERATE
@@ -102,14 +135,10 @@ if st.button("Generate Deck ✨"):
             {
                 "role": "system",
                 "content": """
-Return ONLY valid JSON:
+Return ONLY JSON:
 
 [
-  {
-    "front": "",
-    "back": "",
-    "image_prompt": ""
-  }
+ {"front":"","back":"","image_prompt":""}
 ]
 """
             },
@@ -139,22 +168,17 @@ Return ONLY valid JSON:
 
             cards = json.loads(raw)
 
-            st.success(f"Generated {len(cards)} cards")
-
             for i, card in enumerate(cards, 1):
 
                 st.subheader(f"Card {i}")
                 st.write(card["front"])
 
-                img_url = (
-                    IMAGE_API_URL +
-                    urllib.parse.quote(card["image_prompt"])
-                )
+                img = IMAGE_API_URL + urllib.parse.quote(card["image_prompt"])
 
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    st.image(img_url, use_container_width=True)
+                    st.image(img, use_container_width=True)
 
                 with col2:
                     with st.expander("Answer"):
@@ -163,9 +187,4 @@ Return ONLY valid JSON:
                 st.markdown("---")
 
     except Exception as e:
-        st.error(f"Error: {e}")
-
-        try:
-            st.json(r.json())
-        except:
-            pass
+        st.error(str(e))
