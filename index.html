@@ -5,7 +5,7 @@
 <title>AI Flashcards</title>
 <style>
     body {
-        font-family: Arial, sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         max-width: 800px;
         margin: auto;
         padding: 20px;
@@ -13,42 +13,119 @@
         color: white;
     }
 
-    h1 {
-        text-align: center;
+    h1 { text-align: center; }
+
+    /* Controls */
+    .controls {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-bottom: 20px;
     }
 
-    button, input {
-        padding: 10px;
-        margin: 5px;
+    input, button {
+        padding: 12px;
         border-radius: 8px;
         border: none;
+        font-size: 16px;
+    }
+
+    input {
+        background: #23232f;
+        color: white;
+        border: 1px solid #3b3b4f;
     }
 
     button {
         cursor: pointer;
         background: #6c5ce7;
         color: white;
+        font-weight: bold;
+        transition: background 0.2s;
     }
 
-    .card {
+    button:hover { background: #5b4cc4; }
+
+    /* Flashcard Container (Perspective for 3D flip) */
+    .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+
+    .flashcard {
+        background-color: transparent;
+        height: 200px;
+        perspective: 1000px; /* Remove this if you don't want 3D effect */
+        cursor: pointer;
+    }
+
+    /* The inner container: needed to position the front and back */
+    .flashcard-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        transition: transform 0.6s;
+        transform-style: preserve-3d;
+    }
+
+    /* Do the flip */
+    .flashcard.flipped .flashcard-inner {
+        transform: rotateY(180deg);
+    }
+
+    /* Common style for front and back */
+    .card-face {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        -webkit-backface-visibility: hidden; /* Safari */
+        backface-visibility: hidden;
+        border-radius: 12px;
+        padding: 20px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-size: 1.1em;
+        line-height: 1.4;
+    }
+
+    /* Front Style */
+    .card-front {
         background: #1c1c28;
-        padding: 15px;
-        margin-top: 10px;
-        border-radius: 10px;
+        color: #fff;
+        border: 1px solid #3b3b4f;
     }
 
-    img {
-        max-width: 100%;
-        border-radius: 10px;
-        margin-top: 10px;
+    /* Back Style */
+    .card-back {
+        background: #6c5ce7;
+        color: white;
+        transform: rotateY(180deg);
     }
 
-    #app {
+    /* Utility */
+    #app { display: none; }
+    #loginBox { text-align: center; margin-top: 50px; }
+    
+    /* Loading Spinner */
+    .loader {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #6c5ce7;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
         display: none;
     }
 
-    #loginBox {
-        text-align: center;
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 </style>
 </head>
@@ -62,10 +139,14 @@
 </div>
 
 <div id="app">
-    <input id="topic" placeholder="Enter topic">
-    <button onclick="generate()">Generate</button>
+    <div class="controls">
+        <input id="topic" placeholder="Enter topic (e.g. Calculus)" style="flex-grow: 1;">
+        <input type="number" id="count" value="3" min="1" max="10" style="width: 60px;" title="Number of cards">
+        <button onclick="generate()">Generate</button>
+    </div>
 
-    <div id="output"></div>
+    <div id="loader" class="loader"></div>
+    <div id="output" class="card-grid"></div>
 </div>
 
 <script>
@@ -113,63 +194,82 @@ function login() {
 // GENERATE FLASHCARDS
 // ==========================
 async function generate() {
-
     const topic = document.getElementById("topic").value;
+    const count = document.getElementById("count").value;
+    const outputDiv = document.getElementById("output");
+    const loader = document.getElementById("loader");
 
-    const res = await fetch(
-        "https://gen.pollinations.ai/v1/chat/completions",
-        {
-            method: "POST",
-            headers: {
-                "Authorization": "Bearer " + apiKey,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                model: "openai",
-                messages: [
-                    {
-                        role: "system",
-                        content:
-                        "Return ONLY JSON array with front, back, image_prompt"
-                    },
-                    {
-                        role: "user",
-                        content:
-                        "Create 3 flashcards about " + topic
-                    }
-                ]
-            })
-        }
-    );
+    if (!topic) return alert("Please enter a topic");
 
-    const data = await res.json();
+    // UI State: Loading
+    outputDiv.innerHTML = "";
+    loader.style.display = "block";
 
-    let raw = data.choices[0].message.content
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
+    try {
+        const res = await fetch(
+            "https://gen.pollinations.ai/v1/chat/completions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + apiKey,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "openai",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are a teacher. Return a raw JSON array (no markdown) of objects with keys: 'front' and 'back'."
+                        },
+                        {
+                            role: "user",
+                            content: `Create ${count} flashcards about: ${topic}. Make them concise.`
+                        }
+                    ]
+                })
+            }
+        );
 
-    let cards = JSON.parse(raw);
+        const data = await res.json();
+        
+        // Clean markdown if the AI adds it despite instructions
+        let raw = data.choices[0].message.content
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
 
-    const out = document.getElementById("output");
-    out.innerHTML = "";
+        let cards = JSON.parse(raw);
 
-    cards.forEach(card => {
+        // Render Cards
+        cards.forEach(card => {
+            const cardEl = document.createElement("div");
+            cardEl.className = "flashcard";
+            
+            // Click to flip functionality
+            cardEl.onclick = () => {
+                cardEl.classList.toggle("flipped");
+            };
 
-        const div = document.createElement("div");
-        div.className = "card";
+            cardEl.innerHTML = `
+                <div class="flashcard-inner">
+                    <div class="card-face card-front">
+                        <h3>${card.front}</h3>
+                    </div>
+                    <div class="card-face card-back">
+                        <p>${card.back}</p>
+                    </div>
+                </div>
+            `;
 
-        const img = "https://image.pollinations.ai/prompt/"
-            + encodeURIComponent(card.image_prompt);
+            outputDiv.appendChild(cardEl);
+        });
 
-        div.innerHTML = `
-            <h3>${card.front}</h3>
-            <img src="${img}">
-            <p><b>Answer:</b> ${card.back}</p>
-        `;
-
-        out.appendChild(div);
-    });
+    } catch (error) {
+        console.error(error);
+        alert("Error generating cards. Please try again.");
+    } finally {
+        loader.style.display = "none";
+    }
 }
 
 </script>
